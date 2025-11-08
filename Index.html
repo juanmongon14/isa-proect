@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agente Cívico — Platformer educativo</title>
+<style>
+  :root{--bg:#0b1220;--panel:#0f172a;--muted:#a3b2c2;--text:#e6edf3;--accent:#38bdf8;--card:#111827;--border:#263043}
+  *{box-sizing:border-box}html,body{height:100%;margin:0}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu;background:radial-gradient(1200px 600px at 50% -10%,#13223c 10%, #0b1220 60%);color:var(--text);display:flex;align-items:center;justify-content:center}
+  .wrap{width:min(1100px,96vw)}
+  header{display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px}
+  h1{margin:0;font-size:clamp(18px,3vw,26px)}
+  .sub{color:var(--muted);font-size:12px}
+  .panel{display:grid;grid-template-columns:1fr 320px;gap:12px}
+  canvas{width:100%;height:auto;display:block;background:#081225;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.35), inset 0 0 0 1px rgba(255,255,255,.03)}
+  .side{display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:12px}
+  .log{height:160px;overflow:auto;background:#0f172a;border:1px solid var(--border);border-radius:12px;padding:10px;font-size:13px}
+  .btn{appearance:none;border:none;background:var(--accent);color:#062437;font-weight:800;padding:10px 14px;border-radius:12px;cursor:pointer}
+  .ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  dialog{border:none;border-radius:16px;max-width:min(560px,92vw);padding:0;background:#0b1220;color:var(--text)}
+  .modal{padding:18px;border:1px solid var(--border);border-radius:16px;background:linear-gradient(180deg,#0f172a,#0b1220)}
+  .choices{display:grid;gap:8px;margin-top:10px}
+  .choice{appearance:none;border:1px solid var(--border);background:#0f172a;color:var(--text);padding:10px;border-radius:12px;text-align:left;cursor:pointer}
+  .timeline{display:grid;gap:8px;max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:12px;padding:8px;background:#0f172a}
+  .tl-item{display:flex;gap:8px;align-items:flex-start;border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:6px}
+  .tl-year{font-weight:800;font-size:12px;color:#a5b4fc}
+  .tl-title{font-weight:700;font-size:13px;color:#e2e8f0}
+  .tl-cap{font-size:12px;color:#cbd5e1}
+  .thumb{width:44px;height:44px;flex:0 0 44px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:#0b1220}
+  .thumb img{display:block;width:100%;height:100%;object-fit:cover}
+  @media(max-width:980px){.panel{grid-template-columns:1fr}.log{height:120px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Agente Cívico — Platformer</h1>
+      <div class="sub">Muévete con <b>← →</b> o <b>A D</b>, salta con <b>Espacio</b>, interactúa con <b>E</b>. Quiz en ✳️. Portales con <b>5</b>/<b>10</b> aciertos. Meta 🏁 con <b>≥12</b>.</div>
+    </div>
+    <div><button id="btnReiniciar" class="btn ghost">Reiniciar</button></div>
+  </header>
+
+  <section class="panel">
+    <canvas id="game" width="960" height="540" aria-label="Agente Cívico"></canvas>
+    <aside class="side">
+      <div class="card"><h3 style="margin:0 0 6px">📒 Registro</h3><div id="log" class="log"></div></div>
+      <div class="card">
+        <h3 style="margin:0">🎯 Objetivo</h3>
+        <p style="margin:.5em 0 0;color:#cbd5e1;font-size:13px">Llega a la meta 🏁 con <b>≥12 respuestas correctas</b> (15 total).<br>Portales a los <b>5</b> y <b>10</b> aciertos.</p>
+        <p style="margin:.4em 0 0;color:#a8c0ff;font-size:12px">Acércate a un terminal ✳️ y pulsa <b>E</b>.</p>
+      </div>
+      <div class="card"><h3 style="margin:0 0 6px">🕰️ Línea de tiempo</h3><div id="timeline" class="timeline"></div></div>
+      <div class="card">
+        <h3 style="margin:0 0 6px">🧪 Quiz — Progreso</h3>
+        <p style="margin:.2em 0 0;color:#e2e8f0;font-weight:700">Aciertos: <span id="quizOk">0</span>/15</p>
+        <p id="quizCap" style="margin:.2em 0 0;color:#cbd5e1;font-size:12px">Terminales ✳️ azules en el mapa.</p>
+      </div>
+      <div class="card"><h3 style="margin:0 0 6px">🏅 Personajes</h3><p style="margin:.2em 0 0;color:#cbd5e1;font-size:12px">Los NPC dan contexto (no puntúan).</p></div>
+    </aside>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <div class="modal">
+    <h3 id="dlgTitle" style="margin:0 0 4px">Quiz</h3>
+    <p id="dlgDesc" style="margin:0 0 8px;color:#cbd5e1">Pregunta</p>
+    <div id="dlgChoices" class="choices"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+      <form method="dialog"><button class="btn ghost">Cerrar</button></form>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(()=>{
+// ===== DOM =====
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const logEl = document.getElementById('log');
+const btnReiniciar = document.getElementById('btnReiniciar');
+const dlg = document.getElementById('dlg');
+const dlgTitle = document.getElementById('dlgTitle');
+const dlgDesc = document.getElementById('dlgDesc');
+const dlgChoices = document.getElementById('dlgChoices');
+const quizOkEl = document.getElementById('quizOk');
+
+// ===== Canvas / resize =====
+const DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+function resize(){
+  const cssW = canvas.clientWidth, cssH = Math.round(cssW*9/16);
+  canvas.style.height = cssH+'px';
+  canvas.width = Math.floor(cssW * DPR); canvas.height = Math.floor(cssH * DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+new ResizeObserver(resize).observe(canvas); resize();
+
+// ===== Físicas / input =====
+const G = 0.8, FRICTION = 0.85;
+const KEYS = {left:false,right:false,up:false,interact:false};
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+window.addEventListener('keydown', e=>{
+  if(['ArrowLeft','KeyA'].includes(e.code)) KEYS.left=true;
+  if(['ArrowRight','KeyD'].includes(e.code)) KEYS.right=true;
+  if(e.code==='Space') { KEYS.up=true; e.preventDefault(); }
+  if(e.code==='KeyE') KEYS.interact=true;
+});
+window.addEventListener('keyup', e=>{
+  if(['ArrowLeft','KeyA'].includes(e.code)) KEYS.left=false;
+  if(['ArrowRight','KeyD'].includes(e.code)) KEYS.right=false;
+  if(e.code==='Space') KEYS.up=false;
+  if(e.code==='KeyE') KEYS.interact=false;
+});
+
+// ===== Util =====
+function log(msg){ const div=document.createElement('div'); div.innerHTML=msg; logEl.prepend(div); }
+
+// ==== Timeline ====
+function svgThumb(c1='#38bdf8', c2='#0b1220'){
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'>
+    <rect width='64' height='64' rx='10' fill='${c2}'/><circle cx='20' cy='22' r='10' fill='${c1}'/>
+    <rect x='30' y='30' width='26' height='12' rx='3' fill='${c1}'/><path d='M8 46h48v6H8z' fill='${c1}'/></svg>`;
+  return 'data:image/svg+xml;base64,'+btoa(svg);
+}
+const TL = [
+  {id:'11s', year:'2001', title:'Atentados del 11 de septiembre', cap:'Punto de quiebre para políticas de seguridad.', img:svgThumb('#ef4444')},
+  {id:'patriot', year:'2001', title:'USA PATRIOT Act', cap:'Debate privacidad vs seguridad.', img:svgThumb('#38bdf8')},
+  {id:'guantanamo', year:'2002', title:'Guantánamo', cap:'DD.HH. y detenciones.', img:svgThumb('#f59e0b')},
+  {id:'alianzas', year:'2002–2005', title:'Alianzas', cap:'Cooperación internacional.', img:svgThumb('#22c55e')},
+  {id:'reformas', year:'2015+', title:'Reformas', cap:'Más supervisión.', img:svgThumb('#a78bfa')}
+];
+let TL_UNLOCK = new Set();
+function renderTimeline(){
+  const box = document.getElementById('timeline'); if(!box) return; box.innerHTML='';
+  TL.filter(x=>TL_UNLOCK.has(x.id)).forEach(item=>{
+    const el = document.createElement('div'); el.className='tl-item';
+    el.innerHTML = `<div class='thumb'><img alt='${item.title}' src='${item.img}'/></div>
+      <div><div class='tl-year'>${item.year}</div><div class='tl-title'>${item.title}</div><div class='tl-cap'>${item.cap}</div></div>`;
+    box.appendChild(el);
+  });
+}
+function unlock(id){ if(!TL_UNLOCK.has(id)){ TL_UNLOCK.add(id); renderTimeline(); } }
+
+// ===== Mundo =====
+const level = {
+  width: 3000, height: 540, groundY: 420,
+  platforms: [
+    {x:0,y:420,w:800,h:120},
+    {x:820,y:360,w:300,h:30},
+    {x:1120,y:300,w:180,h:30},
+    {x:1400,y:420,w:400,h:120},
+    {x:1820,y:360,w:240,h:30},
+    {x:2100,y:320,w:220,h:30},
+    {x:2400,y:420,w:600,h:120},
+  ],
+  datos: [
+    {x:180,y:360},{x:560,y:360},{x:870,y:320},{x:1150,y:260},
+    {x:1500,y:360},{x:1850,y:320},{x:2130,y:280},{x:2460,y:360}
+  ],
+  rumores: [{x:700,y:392},{x:1320,y:392},{x:1680,y:392},{x:2050,y:292},{x:2280,y:392}],
+  terminales: [
+    {x:380, y:420-60, id:'quiz'},
+    {x:1500, y:420-60, id:'quiz'},
+    {x:2400, y:420-60, id:'quiz'}
+  ],
+  gates:[
+    {x:1550,width:12,height:180,threshold:5,open:false},
+    {x:2550,width:12,height:180,threshold:10,open:false}
+  ],
+  npcs:[
+    {x:620,kind:'periodista',text:'Contexto: prensa exige transparencia.'},
+    {x:1450,kind:'ciudadano',text:'“Quiero seguridad sin perder derechos.”'},
+    {x:2200,kind:'oficial',text:'Operativos requieren marco legal y apoyo.'}
+  ],
+  meta:{x:2920,y:350}
+};
+
+// ===== Player & cam =====
+const player = { x:40, y: level.groundY-48, w: 32, h: 48, vx:0, vy:0, speed:4.2, jump:-16, grounded:false };
+const camera = {x:0,y:0};
+
+// ===== Quiz =====
+const QUIZ = [
+  {q:'¿Qué acontecimiento detonó la Guerra contra el Terrorismo?',opts:['La Guerra Fría','Los atentados del 11 de septiembre','La caída del Muro de Berlín'],ok:1},
+  {q:'¿En qué año comenzaron las operaciones militares en Afganistán?',opts:['2001','1999','2011'],ok:0},
+  {q:'¿Quién declaró oficialmente la Guerra contra el Terrorismo?',opts:['George W. Bush','Joe Biden','Bill Clinton'],ok:0},
+  {q:'¿Qué grupo fue identificado como responsable principal de los ataques del 11 de septiembre?',opts:['ISIS','Al Qaeda','FARC'],ok:1},
+  {q:'¿Dónde se encontraba el principal refugio de Al Qaeda al inicio de la guerra?',opts:['Afganistán','Irán','Arabia Saudita'],ok:0},
+  {q:'¿Cuál fue el objetivo inicial de la invasión a Afganistán?',opts:['Eliminar armas nucleares','Capturar o eliminar a Al Qaeda y a los talibanes','Obtener recursos naturales'],ok:1},
+  {q:'¿Qué país fue invadido en 2003 como parte de la Guerra contra el Terrorismo?',opts:['Irak','Rusia','India'],ok:0},
+  {q:'¿Qué argumento dio el gobierno de EE. UU. para invadir Irak en 2003?',opts:['La existencia de armas de destrucción masiva','La presencia de minas de oro','Una disputa territorial'],ok:0},
+  {q:'¿Qué líder iraquí fue capturado durante la guerra?',opts:['Osama bin Laden','Saddam Hussein','Muamar Gadafi'],ok:1},
+  {q:'¿Qué consecuencia tuvo esta guerra en los países afectados?',opts:['Aumento de la estabilidad política','Crisis humanitarias y desplazamiento de civiles','Reducción del terrorismo en todo el mundo'],ok:1},
+  {q:'¿Cuál fue una crítica común hacia la Guerra contra el Terrorismo?',opts:['El alto costo económico y humano','La falta de apoyo internacional','Que duró muy poco tiempo'],ok:0},
+  {q:'¿Qué organización lideró muchas de las operaciones militares?',opts:['ONU','OTAN','OEA'],ok:1},
+  {q:'¿Qué país brindó apoyo militar directo a EE. UU. en Afganistán?',opts:['Francia','Brasil','México'],ok:0},
+  {q:'¿Qué efecto tuvo esta guerra en la seguridad internacional?',opts:['Reducción total del terrorismo','Mayor tensión y vigilancia en fronteras','Eliminación de grupos radicales'],ok:1},
+  {q:'¿Qué tipo de impacto económico tuvo la guerra en Estados Unidos?',opts:['Incremento leve del gasto','Enorme aumento del gasto militar','Ahorro significativo de dinero'],ok:1},
+];
+let QUIZ_POOL = [...Array(QUIZ.length).keys()];
+const state = { quizOk:0, gameOver:false, win:false };
+
+function refillPoolIfNeeded(){ if (QUIZ_POOL.length === 0) QUIZ_POOL = [...Array(QUIZ.length).keys()]; }
+
+function abrirQuiz(){
+  refillPoolIfNeeded();
+  const idx = QUIZ_POOL.splice(Math.floor(Math.random()*QUIZ_POOL.length),1)[0];
+  const item = QUIZ[idx];
+  dlgTitle.textContent = 'Quiz — Historia';
+  dlgDesc.textContent = item.q;
+  dlgChoices.innerHTML='';
+  item.opts.forEach((opt,i)=>{
+    const b=document.createElement('button'); b.className='choice'; b.textContent=opt;
+    b.onclick=()=>{
+      if(i===item.ok){
+        state.quizOk++; quizOkEl.textContent=state.quizOk; log(`<b>Quiz ✓</b> ${item.q}`);
+        level.gates.forEach(g=>{ if(!g.open && state.quizOk>=g.threshold){ g.open=true; log(`<b>Portal abierto</b> — Aciertos ≥ ${g.threshold}`); }});
+      } else {
+        log(`<span style='color:#fca5a5'><b>Quiz ✗</b> ${item.q}</span>`);
+      }
+      if (terminalCercano) {
+        const side = (player.x + player.w/2) < (terminalCercano.x + 13) ? -2 : 2;
+        player.x += side;
+      }
+      dlg.close(); refillPoolIfNeeded();
+    };
+    dlgChoices.appendChild(b);
+  });
+  dlg.showModal();
+}
+
+function completarNivel(){
+  if (state.win) return;
+  state.win = true;
+  dlgTitle.textContent = '¡Nivel completado! 🎉';
+  dlgDesc.textContent  = `Excelente trabajo. Aciertos: ${state.quizOk}/15.`;
+  dlgChoices.innerHTML = '';
+  const b=document.createElement('button'); b.className='choice'; b.textContent='Continuar';
+  b.onclick=()=>dlg.close();
+  dlgChoices.appendChild(b);
+  dlg.showModal();
+  log('<b>¡Meta alcanzada!</b> 🏁');
+}
+
+// ===== NPC diálogo =====
+function abrirDialogoNPC(n){
+  dlgTitle.textContent = n.kind.charAt(0).toUpperCase()+n.kind.slice(1);
+  dlgDesc.textContent = n.text;
+  dlgChoices.innerHTML='';
+  const b=document.createElement('button'); b.className='choice'; b.textContent='Entendido';
+  b.onclick=()=>{ dlg.close(); unlock('11s'); };
+  dlgChoices.appendChild(b);
+  dlg.showModal();
+}
+
+// ===== Colisiones =====
+function rectsOverlap(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+
+// ===== Loop =====
+let terminalCercano=null, npcCercano=null, metaCercana=false;
+
+function update(){
+  if(state.gameOver || state.win) return;
+
+  // movimiento
+  const ax = (KEYS.left?-player.speed:0) + (KEYS.right?player.speed:0);
+  player.vx = ax ? ax : player.vx * FRICTION;
+  if(Math.abs(player.vx)<0.1) player.vx=0;
+  if(KEYS.up && player.grounded){ player.vy = player.jump; player.grounded=false; }
+  player.vy += G;
+
+  // aplicar movimiento
+  player.x += player.vx; player.y += player.vy;
+  player.x = clamp(player.x, 0, level.width - player.w);
+
+  // suelo base
+  if(player.y + player.h > level.groundY){ player.y = level.groundY - player.h; player.vy = 0; player.grounded=true; }
+
+  // plataformas
+  level.platforms.forEach(p=>{
+    const r={x:p.x,y:p.y,w:p.w,h:p.h};
+    const me={x:player.x,y:player.y,w:player.w,h:player.h};
+    if(rectsOverlap(me,r)){
+      if(me.y+me.h- player.vy <= r.y+8){ player.y = r.y - me.h; player.vy=0; player.grounded=true; }
+      else if(me.y - player.vy >= r.y + r.h - 8){ player.y = r.y + r.h; player.vy = 0.5; }
+      else if(me.x < r.x){ player.x = r.x - me.w; player.vx=0; }
+      else{ player.x = r.x + r.w; player.vx=0; }
+    }
+  });
+
+  // cámara
+  camera.x = clamp(player.x - canvas.width/(DPR*2) + player.w/2, 0, level.width - canvas.width/DPR);
+
+  // recolectables (decorativo)
+  for(let i=level.datos.length-1;i>=0;i--){
+    const d = level.datos[i];
+    const r={x:d.x,y:d.y,w:18,h:18};
+    const me={x:player.x,y:player.y,w:player.w,h:player.h};
+    if(rectsOverlap(me,r)){
+      level.datos.splice(i,1);
+      log('Has verificado un <b>dato</b> 🧠');
+      if(state.quizOk>=1) unlock('guantanamo');
+      if(state.quizOk>=5) unlock('reformas');
+    }
+  }
+
+  // rumores
+  for(const r of level.rumores){
+    const box={x:r.x,y:r.y,w:22,h:22};
+    const me={x:player.x,y:player.y,w:player.w,h:player.h};
+    if(rectsOverlap(me,box)){
+      if(player.x < r.x) player.x = r.x - player.w; else player.x = r.x + box.w;
+      player.vx = 0;
+    }
+  }
+
+  // terminal cercano
+  terminalCercano = null;
+  for (const t of level.terminales) {
+    const box = { x: t.x, y: t.y, w: 26, h: 60 };
+    const me = { x: player.x, y: player.y, w: player.w, h: player.h };
+    if (rectsOverlap(me, { x: box.x - 10, y: box.y, w: box.w + 20, h: box.h })) { terminalCercano = t; break; }
+  }
+  if (terminalCercano && KEYS.interact) { abrirQuiz(); }
+
+  // anti-stuck junto a terminal
+  if (terminalCercano && player.grounded) {
+    const centerPlayer = player.x + player.w/2;
+    const centerTerm   = terminalCercano.x + 13;
+    if (Math.abs(centerPlayer - centerTerm) < 14) {
+      player.x += (centerPlayer < centerTerm) ? -2 : 2;
+    }
+  }
+
+  // NPC cercano
+  npcCercano = null;
+  for(const n of level.npcs){
+    const box={x:n.x,y:level.groundY-56,w:26,h:56};
+    const me={x:player.x,y:player.y,w:player.w,h:player.h};
+    if(rectsOverlap(me,{x:box.x-12,y:box.y,w:box.w+24,h:box.h})) { npcCercano=n; break; }
+  }
+  if(npcCercano && KEYS.interact){ abrirDialogoNPC(npcCercano); }
+
+  // Portales
+  for(const g of level.gates){
+    if(g.open) continue;
+    const gateRect={x:g.x,y:level.groundY-g.height,w:g.width,h:g.height};
+    const me={x:player.x,y:player.y,w:player.w,h:player.h};
+    if(rectsOverlap(me,gateRect)){
+      if(me.x < gateRect.x) player.x = gateRect.x - me.w; else player.x = gateRect.x + gateRect.w;
+      player.vx = 0;
+    }
+  }
+
+  // Meta (interacción con E)
+  metaCercana = false;
+  const metaR = {x:level.meta.x,y:level.groundY-88,w:18,h:88};
+  const meMeta = {x:player.x,y:player.y,w:player.w,h:player.h};
+  if(rectsOverlap(meMeta, metaR)){
+    metaCercana = true;
+    if (KEYS.interact){
+      if (state.quizOk >= 12){ completarNivel(); }
+      else {
+        const faltan = Math.max(0, 12 - state.quizOk);
+        log(`Necesitas ≥12 aciertos para finalizar. Te faltan <b>${faltan}</b>.`);
+      }
+    }
+  }
+
+  // fuera del mapa
+  if(player.y> level.height){ state.gameOver=true; log('<span style="color:#fca5a5">Caíste fuera de la zona segura.</span>'); }
+}
+
+// ===== Render =====
+function draw(){
+  ctx.clearRect(0,0,canvas.width/DPR,canvas.height/DPR);
+  const W = canvas.width/DPR, H=canvas.height/DPR;
+
+  ctx.fillStyle = '#071022'; ctx.fillRect(0,0,W,H);
+  drawStars(0.6, 0.3);
+
+  ctx.save(); ctx.translate(-camera.x, 0);
+
+  ctx.fillStyle = '#0b1936'; ctx.fillRect(0, level.groundY, level.width, H-level.groundY);
+
+  ctx.fillStyle = '#15305f';
+  for(const p of level.platforms){ ctx.fillRect(p.x, p.y, p.w, p.h); }
+
+  for(const t of level.terminales){ drawTerminal(t); }
+  for(const g of level.gates){ drawGate(g); }
+  for(const n of level.npcs){ drawNPC(n); }
+
+  for(const d of level.datos){
+    ctx.fillStyle='#7ee787'; ctx.fillRect(d.x,d.y,18,18);
+    ctx.fillStyle='#0a2a18'; ctx.fillRect(d.x+4,d.y+4,10,10);
+  }
+  for(const r of level.rumores){
+    ctx.fillStyle='#ef4444'; ctx.fillRect(r.x,r.y,22,22);
+    ctx.fillStyle='rgba(255,255,255,.12)'; ctx.fillRect(r.x+4,r.y+4,14,14);
+  }
+
+  drawFlag(level.meta.x, level.groundY);
+  drawPlayer();
+
+  if(terminalCercano){
+    ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='bold 14px system-ui';
+    ctx.fillText('Pulsa E para responder', terminalCercano.x-40, level.groundY-68);
+  }
+  if(npcCercano){
+    ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='bold 14px system-ui';
+    ctx.fillText('Pulsa E para hablar', npcCercano.x-16, level.groundY-70);
+  }
+  if(metaCercana){
+    ctx.fillStyle='rgba(255,255,255,.9)'; ctx.font='bold 14px system-ui';
+    const txt = state.quizOk>=12 ? 'Pulsa E para finalizar' : `Necesitas 12 aciertos (${state.quizOk}/12)`;
+    ctx.fillText(txt, level.meta.x - 40, level.groundY - 96);
+  }
+
+  ctx.restore();
+
+  if(state.gameOver || state.win){
+    const boxW=360, boxH=120; const x=(W-boxW)/2, y=(H-boxH)/2;
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(x,y,boxW,boxH);
+    ctx.fillStyle='#e6edf3'; ctx.font='bold 20px system-ui';
+    ctx.fillText(state.win? '¡Victoria! 🏁': 'Fin del juego', x+20, y+40);
+    ctx.font='14px system-ui';
+    ctx.fillText(state.win? 'Completaste el objetivo.' : 'Reintenta para completar el nivel.', x+20, y+66);
+    ctx.fillText('Pulsa “Reiniciar” para jugar de nuevo.', x+20, y+92);
+  }
+}
+
+function drawStars(a=0.6,b=0.3){
+  ctx.save();
+  for(let i=0;i<80;i++){
+    const x=((i*37.7)%canvas.width)/DPR; const y=((i*91.3)%canvas.height)/DPR * a + 10;
+    ctx.fillStyle='rgba(180,210,255,'+b+')'; ctx.fillRect(x,y,1,1);
+  }
+  ctx.restore();
+}
+function drawTerminal(t){
+  const x=t.x, y=t.y; // usa la y propia del terminal
+  ctx.fillStyle = '#3b82f6'; ctx.fillRect(x, y, 26, 60);
+  ctx.fillStyle = '#0b1220'; ctx.fillRect(x+5, y+8, 16, 12);
+  ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(x+5, y+28, 16, 4); ctx.fillRect(x+5, y+36, 16, 4);
+}
+function drawGate(g){
+  if(g.open) return;
+  const x=g.x, y=level.groundY-g.height;
+  ctx.fillStyle='#64748b'; ctx.fillRect(x, y, g.width, g.height);
+  ctx.fillStyle='#94a3b8'; ctx.fillRect(x+2, y+6, g.width-4, 6);
+  // texto informativo
+  const msg1 = `Se abre con ${g.threshold} aciertos`;
+  const msg2 = `Responde más para abrir (${state.quizOk}/${g.threshold})`;
+  ctx.font='bold 12px system-ui';
+  ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fillText(msg1, x - 90, y - 20);
+  ctx.font='12px system-ui';
+  ctx.fillStyle='rgba(255,255,255,.75)'; ctx.fillText(msg2, x - 110, y - 6);
+}
+function drawNPC(n){
+  const x=n.x, y=level.groundY-52;
+  ctx.fillStyle = n.kind==='periodista'? '#334155' : n.kind==='ciudadano'? '#0b2545' : '#1d4ed8';
+  ctx.fillRect(x, y, 22, 46);
+  ctx.fillStyle='#f1c27d'; ctx.fillRect(x+4, y-10, 14, 10);
+  if(n.kind==='periodista'){ ctx.fillStyle='#a3e635'; ctx.fillRect(x+3, y+8, 16, 8); }
+  if(n.kind==='oficial'){ ctx.fillStyle='#93c5fd'; ctx.fillRect(x+16, y+16, 6, 10); }
+}
+function drawFlag(x, groundY){
+  ctx.fillStyle='#eab308'; ctx.fillRect(x, groundY-88, 6, 88);
+  ctx.fillStyle='#38bdf8'; ctx.beginPath();
+  ctx.moveTo(x+6, groundY-84); ctx.lineTo(x+54, groundY-74); ctx.lineTo(x+6, groundY-64);
+  ctx.closePath(); ctx.fill();
+}
+function drawPlayer(){
+  const px=player.x, py=player.y;
+  ctx.fillStyle='#0f172a'; ctx.fillRect(px+6, py+32, 8, 16); ctx.fillRect(px+18, py+32, 8, 16);
+  ctx.fillStyle='#1f2937'; ctx.fillRect(px+6, py+48, 10, 4); ctx.fillRect(px+18, py+48, 10, 4);
+  ctx.fillStyle='#0b2545'; ctx.fillRect(px, py, player.w, 34);
+  ctx.fillStyle='#e2e8f0'; ctx.fillRect(px+6, py+4, player.w-12, 14);
+  ctx.fillStyle='#ef4444'; ctx.beginPath(); ctx.moveTo(px+player.w/2, py+6);
+  ctx.lineTo(px+player.w/2-4, py+16); ctx.lineTo(px+player.w/2+4, py+16); ctx.closePath(); ctx.fill();
+  ctx.fillRect(px+player.w/2-2, py+16, 4, 10);
+  ctx.fillStyle='#f1c27d'; ctx.fillRect(px+6, py-12, player.w-12, 12);
+  ctx.fillStyle='#1f2937'; ctx.fillRect(px+6, py-14, player.w-12, 6);
+  ctx.fillStyle='#38bdf8'; ctx.fillRect(px+player.w-6, py+18, 6, 10);
+  ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(px, py+player.h, player.w, 4);
+}
+
+// ===== Main loop =====
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+function reiniciar(){
+  Object.assign(state,{quizOk:0,gameOver:false,win:false});
+  Object.assign(player,{x:40,y:level.groundY-48,vx:0,vy:0,grounded:false});
+  level.gates.forEach(g=>g.open=false);
+  TL_UNLOCK = new Set(); renderTimeline(); quizOkEl.textContent='0'; logEl.innerHTML='';
+  unlock('11s');
+}
+btnReiniciar.addEventListener('click', reiniciar);
+
+reiniciar(); loop();
+})();
+</script>
+</body>
+</html>
